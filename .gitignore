@@ -1,0 +1,35 @@
+# Python bytecode and caches
+**/__pycache__/
+**/pycache/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter and test/tool caches
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+
+# Generated logs
+*.log
+
+# Operating system and Windows/WSL metadata
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+*.Zone.Identifier
+
+# Editor and temporary files
+*~
+*.swp
+*.swo
+*.tmp
+*.temp
+*.bak
+*.orig
+.idea/
+.vscode/
