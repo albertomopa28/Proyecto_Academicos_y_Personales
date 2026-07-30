@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.coverage
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+build/
+dist/
+htmlcov/
+
+# Generated verification output
+artifacts/
+codex_tests/
+
+# Notebook checkpoints and local editor files
+.ipynb_checkpoints/
+.idea/
+.vscode/
+*.swp
