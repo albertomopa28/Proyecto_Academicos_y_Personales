@@ -111,3 +111,83 @@ class ADRParameters:
         """Return ``H / C`` in K."""
 
         return self.heating_value / self.specific_heat
+
+
+@dataclass(frozen=True, slots=True)
+class FuelProperties:
+    """Navas-Montilla Tables 2 and 4 fuel properties in SI units."""
+
+    intrinsic_density: float = 400.0
+    dry_specific_heat: float = 1_000.0
+    maximum_fuel_load: float = 4.0
+    layer_height: float = 1.0
+    pyrolysis_temperature: float = 600.0
+    heating_value: float = 4_000_000.0
+
+    def __post_init__(self) -> None:
+        values = (
+            self.intrinsic_density,
+            self.dry_specific_heat,
+            self.maximum_fuel_load,
+            self.layer_height,
+            self.pyrolysis_temperature,
+            self.heating_value,
+        )
+        if not all(isfinite(value) and value > 0.0 for value in values):
+            raise InvalidConfigurationError("Fuel properties must be finite and strictly positive.")
+
+
+@dataclass(frozen=True, slots=True)
+class EnvironmentalProperties:
+    """Navas-Montilla ambient properties and fixed physical constants."""
+
+    ambient_temperature: float = 300.0
+    air_density: float = 1.0
+    air_specific_heat: float = 1_000.0
+    water_evaporation_temperature: float = 373.0
+    water_latent_heat: float = 2_257_000.0
+    water_specific_heat: float = 4_190.0
+    stefan_boltzmann_constant: float = 5.670e-8
+    emissivity: float = 0.9
+
+    def __post_init__(self) -> None:
+        values = (
+            self.ambient_temperature,
+            self.air_density,
+            self.air_specific_heat,
+            self.water_evaporation_temperature,
+            self.water_latent_heat,
+            self.water_specific_heat,
+            self.stefan_boltzmann_constant,
+            self.emissivity,
+        )
+        if not all(isfinite(value) and value > 0.0 for value in values):
+            raise InvalidConfigurationError(
+                "Environmental properties must be finite and strictly positive."
+            )
+        if self.emissivity > 1.0:
+            raise InvalidConfigurationError("emissivity must not exceed one.")
+
+
+@dataclass(frozen=True, slots=True)
+class CalibrationParameters:
+    """Navas-Montilla Table 3 calibration parameters in SI units."""
+
+    conductive_thermal_conductivity: float = 0.1
+    optical_path_length: float = 1.0
+    surface_cooling_coefficient: float = 50.0
+    wind_correction: float = 0.02
+    slope_correction: float = 0.04
+
+    def __post_init__(self) -> None:
+        values = (
+            self.conductive_thermal_conductivity,
+            self.optical_path_length,
+            self.surface_cooling_coefficient,
+            self.wind_correction,
+            self.slope_correction,
+        )
+        if not all(isfinite(value) and value >= 0.0 for value in values):
+            raise InvalidConfigurationError(
+                "Calibration parameters must be finite and non-negative."
+            )

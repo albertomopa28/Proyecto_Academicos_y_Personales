@@ -152,6 +152,59 @@ def implicit_midpoint_step(
     )
 
 
+def implicit_midpoint_step_constant_reaction(
+    temperature: ArrayLike,
+    biomass: ArrayLike,
+    time_step: float,
+    parameters: ADRParameters,
+    reaction_rate: float,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Advance Navas-Montilla Eqs. (41)-(42) by implicit midpoint."""
+
+    temperature_array, biomass_array = validate_temperature_biomass(
+        temperature, biomass, context="constant-reaction midpoint input"
+    )
+    if not isfinite(time_step) or time_step <= 0.0:
+        raise InvalidConfigurationError("Reaction time_step must be finite and > 0 s.")
+    if not isfinite(reaction_rate) or reaction_rate < 0.0:
+        raise InvalidConfigurationError("reaction_rate must be finite and non-negative.")
+    half_step = 0.5 * time_step
+    active = temperature_array >= parameters.pyrolysis_temperature
+    midpoint_rate = np.where(active, reaction_rate, 0.0)
+    denominator = 1.0 + half_step * midpoint_rate
+    midpoint_biomass = biomass_array / denominator
+    midpoint_temperature = (
+        temperature_array
+        + half_step
+        * (
+            parameters.cooling_rate * parameters.ambient_temperature
+            + parameters.heat_release_temperature * midpoint_rate * midpoint_biomass
+        )
+    ) / (1.0 + half_step * parameters.cooling_rate)
+    active = active & (midpoint_temperature >= parameters.pyrolysis_temperature)
+    midpoint_rate = np.where(active, reaction_rate, 0.0)
+    denominator = 1.0 + half_step * midpoint_rate
+    midpoint_biomass = biomass_array / denominator
+    midpoint_temperature = (
+        temperature_array
+        + half_step
+        * (
+            parameters.cooling_rate * parameters.ambient_temperature
+            + parameters.heat_release_temperature * midpoint_rate * midpoint_biomass
+        )
+    ) / (1.0 + half_step * parameters.cooling_rate)
+    positivity_factor = half_step * midpoint_rate
+    if np.any(positivity_factor >= 1.0):
+        raise NonPhysicalStateError("Implicit midpoint constant reaction requires 0.5*dt*A < 1.")
+    next_temperature = 2.0 * midpoint_temperature - temperature_array
+    next_biomass = biomass_array * (1.0 - positivity_factor) / denominator
+    return validate_temperature_biomass(
+        next_temperature,
+        next_biomass,
+        context="constant-reaction midpoint output",
+    )
+
+
 def integrate_reaction(
     temperature: ArrayLike,
     biomass: ArrayLike,

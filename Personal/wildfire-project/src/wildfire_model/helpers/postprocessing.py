@@ -6,6 +6,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from wildfire_model.exceptions import InvalidConfigurationError
+from wildfire_model.mesh.mesh_2d import UniformMesh2D
 
 FrontDirection = Literal["left", "right"]
 
@@ -118,3 +119,110 @@ def observed_orders(
     return np.log(error_array[:-1] / error_array[1:]) / np.log(
         resolution_array[:-1] / resolution_array[1:]
     )
+
+
+def _checked_2d_field(
+    values: ArrayLike,
+    mesh: UniformMesh2D,
+    name: str,
+) -> NDArray[np.float64]:
+    array = np.asarray(values, dtype=np.float64)
+    if array.shape != mesh.shape or not np.all(np.isfinite(array)):
+        raise InvalidConfigurationError(f"{name} must be finite with shape {mesh.shape}.")
+    return array
+
+
+def _interface_mask(region: NDArray[np.bool_]) -> NDArray[np.bool_]:
+    padded = np.pad(region, 1, mode="edge")
+    interior = padded[1:-1, 1:-1]
+    surrounded = padded[1:-1, :-2] & padded[1:-1, 2:] & padded[:-2, 1:-1] & padded[2:, 1:-1]
+    return interior & ~surrounded
+
+
+def isotherm_front(
+    temperature: ArrayLike,
+    mesh: UniformMesh2D,
+    threshold: float,
+) -> NDArray[np.bool_]:
+    """Return hot-side cells adjacent to a declared isotherm."""
+
+    values = _checked_2d_field(temperature, mesh, "temperature")
+    if not np.isfinite(threshold):
+        raise InvalidConfigurationError("Isotherm threshold must be finite.")
+    return _interface_mask(values >= threshold)
+
+
+def consumed_biomass_front(
+    biomass: ArrayLike,
+    mesh: UniformMesh2D,
+    threshold: float = 0.99,
+) -> NDArray[np.bool_]:
+    """Return consumed-side cells adjacent to the biomass threshold."""
+
+    values = _checked_2d_field(biomass, mesh, "biomass")
+    if not np.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
+        raise InvalidConfigurationError("Biomass threshold must lie in [0, 1].")
+    return _interface_mask(values < threshold)
+
+
+def burned_area(
+    biomass: ArrayLike,
+    mesh: UniformMesh2D,
+    threshold: float = 0.99,
+) -> float:
+    """Return area in m² with biomass below the declared threshold."""
+
+    values = _checked_2d_field(biomass, mesh, "biomass")
+    if not np.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
+        raise InvalidConfigurationError("Biomass threshold must lie in [0, 1].")
+    return float(np.count_nonzero(values < threshold) * mesh.cell_area)
+
+
+def front_extents(
+    front: ArrayLike,
+    mesh: UniformMesh2D,
+) -> tuple[float, float, float, float]:
+    """Return left, right, lower, and upper front coordinates in m."""
+
+    mask = np.asarray(front, dtype=np.bool_)
+    if mask.shape != mesh.shape or not np.any(mask):
+        raise InvalidConfigurationError(
+            f"Front mask must have shape {mesh.shape} and contain a front."
+        )
+    x, y = mesh.cell_centers
+    return (
+        float(np.min(x[mask])),
+        float(np.max(x[mask])),
+        float(np.min(y[mask])),
+        float(np.max(y[mask])),
+    )
+
+
+def burned_centroid(
+    biomass: ArrayLike,
+    mesh: UniformMesh2D,
+) -> tuple[float, float]:
+    """Return the consumption-weighted centroid in m."""
+
+    values = _checked_2d_field(biomass, mesh, "biomass")
+    if np.any((values < 0.0) | (values > 1.0)):
+        raise InvalidConfigurationError("Biomass must lie in [0, 1].")
+    weights = 1.0 - values
+    total = float(np.sum(weights))
+    if total <= 0.0:
+        raise InvalidConfigurationError("Burned centroid requires consumed biomass.")
+    x, y = mesh.cell_centers
+    return float(np.sum(weights * x) / total), float(np.sum(weights * y) / total)
+
+
+def front_anisotropy(
+    front: ArrayLike,
+    mesh: UniformMesh2D,
+) -> float:
+    """Return x span divided by y span for a non-degenerate front."""
+
+    left, right, lower, upper = front_extents(front, mesh)
+    y_span = upper - lower
+    if y_span <= 0.0:
+        raise InvalidConfigurationError("Front anisotropy requires a positive y span.")
+    return (right - left) / y_span

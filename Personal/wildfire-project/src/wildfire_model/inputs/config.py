@@ -1,15 +1,29 @@
 """TOML configuration loading for one-dimensional ADR simulations."""
 
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from math import isfinite
 from pathlib import Path
 from typing import cast
 
 import numpy as np
 from numpy.typing import NDArray
 
-from wildfire_model.models.parameters import ADRParameters
-from wildfire_model.numerics.boundary_conditions import BoundaryCondition
+from wildfire_model.exceptions import InvalidConfigurationError
+from wildfire_model.inputs.fields import FieldInput
+from wildfire_model.models.combustion import CombustionModel
+from wildfire_model.models.moisture import MoistureModel
+from wildfire_model.models.parameters import (
+    ADRParameters,
+    CalibrationParameters,
+    EnvironmentalProperties,
+    FuelProperties,
+)
+from wildfire_model.models.properties import MixtureApproximation
+from wildfire_model.numerics.boundary_conditions import (
+    BoundaryCondition,
+    BoundaryCondition2D,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +47,33 @@ class SimulationConfiguration:
     output_times: NDArray[np.float64]
     maximum_time_step: float | None
     initial_condition: str
+
+
+@dataclass(frozen=True, slots=True)
+class CompleteModelConfiguration:
+    """Separated physical and spatial inputs for Navas-Montilla Eq. (32)."""
+
+    fuel: FuelProperties = field(default_factory=FuelProperties)
+    environment: EnvironmentalProperties = field(default_factory=EnvironmentalProperties)
+    calibration: CalibrationParameters = field(default_factory=CalibrationParameters)
+    surface_coverage: FieldInput = 1.0
+    maximum_fuel_load: FieldInput | None = None
+    moisture: FieldInput = 0.0
+    wind_x: FieldInput = 0.0
+    wind_y: FieldInput = 0.0
+    elevation: FieldInput = 0.0
+    conductive_thermal_conductivity: FieldInput | None = None
+    optical_path_length: FieldInput | None = None
+    ambient_temperature: FieldInput | None = None
+    mixture_approximation: MixtureApproximation = "complete"
+    moisture_model: MoistureModel = "NM"
+    combustion_model: CombustionModel = "arrhenius"
+    arrhenius_pre_exponential_factor: float = 0.0173
+    constant_reaction_rate: float = 0.01
+    evaporation_interval: float | None = None
+    boundary: BoundaryCondition2D = "transmissive"
+    weno_order: int = 7
+    cfl: float = 0.4
 
 
 def load_configuration(path: str | Path) -> SimulationConfiguration:
@@ -59,8 +100,12 @@ def load_configuration(path: str | Path) -> SimulationConfiguration:
     )
     final_time = float(simulation["final_time"])
     output_interval = float(simulation["output_interval"])
-    output_times = np.arange(0.0, final_time + 0.5 * output_interval, output_interval)
-    output_times[-1] = final_time
+    if not isfinite(final_time) or final_time < 0.0:
+        raise InvalidConfigurationError("final_time must be finite and non-negative.")
+    if not isfinite(output_interval) or output_interval <= 0.0:
+        raise InvalidConfigurationError("output_interval must be finite and positive.")
+    output_times = np.arange(0.0, final_time, output_interval, dtype=np.float64)
+    output_times = np.append(output_times, final_time)
     maximum_time_step_value = simulation.get("maximum_time_step")
     maximum_time_step = None if maximum_time_step_value is None else float(maximum_time_step_value)
     boundary_value = str(numerics["boundary"])

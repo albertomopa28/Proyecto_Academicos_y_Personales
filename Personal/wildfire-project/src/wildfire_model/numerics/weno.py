@@ -171,6 +171,77 @@ def reconstruct_faces(
     return left_states, right_states
 
 
+def _reconstruct_stencils(
+    stencils: NDArray[np.float64],
+    data: _WENOData,
+    epsilon: float,
+) -> NDArray[np.float64]:
+    """Vectorized WENO reconstruction for stencils on any leading shape."""
+
+    if data.radius == 1:
+        return np.asarray(stencils[..., 0], dtype=np.float64)
+    candidate_values = []
+    smoothness_values = []
+    for indices, coefficients, matrix in zip(
+        data.candidate_indices,
+        data.candidate_coefficients,
+        data.smoothness_matrices,
+        strict=True,
+    ):
+        local = stencils[..., indices]
+        candidate_values.append(np.einsum("...i,i->...", local, coefficients))
+        smoothness_values.append(np.einsum("...i,ij,...j->...", local, matrix, local))
+    candidates = np.stack(candidate_values, axis=-1)
+    smoothness = np.stack(smoothness_values, axis=-1)
+    nonlinear_weights = data.linear_weights / (epsilon + smoothness) ** 2
+    nonlinear_weights /= np.sum(nonlinear_weights, axis=-1, keepdims=True)
+    return np.asarray(np.sum(nonlinear_weights * candidates, axis=-1), dtype=np.float64)
+
+
+def reconstruct_faces_along_axis(
+    values: ArrayLike,
+    order: int,
+    boundary: BoundaryCondition,
+    axis: int,
+    *,
+    epsilon: float = 1.0e-6,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Reconstruct every line of an array without transposing field semantics."""
+
+    if not isfinite(epsilon) or epsilon <= 0.0:
+        raise InvalidConfigurationError("WENO epsilon must be finite and > 0.")
+    array = np.asarray(values, dtype=np.float64)
+    if array.ndim < 1 or array.size == 0 or not np.all(np.isfinite(array)):
+        raise InvalidConfigurationError("WENO input must be a finite non-empty array.")
+    if not -array.ndim <= axis < array.ndim:
+        raise InvalidConfigurationError(
+            f"WENO axis {axis} is invalid for an array with {array.ndim} dimensions."
+        )
+    normalized_axis = axis % array.ndim
+    moved = np.moveaxis(array, normalized_axis, -1)
+    data = _weno_data(order)
+    padding = [(0, 0)] * moved.ndim
+    padding[-1] = (data.radius, data.radius)
+    if boundary == "periodic":
+        extended = np.pad(moved, padding, mode="wrap")
+    elif boundary == "transmissive":
+        extended = np.pad(moved, padding, mode="edge")
+    else:
+        raise InvalidConfigurationError(
+            f"Unsupported boundary condition {boundary!r}; expected 'periodic' or 'transmissive'."
+        )
+    windows = np.lib.stride_tricks.sliding_window_view(extended, data.offsets.size, axis=-1)
+    number_of_faces = moved.shape[-1] + 1
+    left_stencils = windows[..., :number_of_faces, :]
+    right_stencils = windows[..., 1 : number_of_faces + 1, ::-1]
+    left = _reconstruct_stencils(left_stencils, data, epsilon)
+    right = _reconstruct_stencils(right_stencils, data, epsilon)
+    return (
+        np.moveaxis(left, -1, normalized_axis),
+        np.moveaxis(right, -1, normalized_axis),
+    )
+
+
 def upwind_flux(
     values: ArrayLike,
     velocity: float,

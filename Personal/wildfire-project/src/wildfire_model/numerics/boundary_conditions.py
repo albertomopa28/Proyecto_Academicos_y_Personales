@@ -8,6 +8,12 @@ from numpy.typing import ArrayLike, NDArray
 from wildfire_model.exceptions import InvalidConfigurationError
 
 BoundaryCondition = Literal["periodic", "transmissive"]
+BoundaryCondition2D = Literal[
+    "periodic",
+    "transmissive",
+    "zero_diffusive_flux",
+    "zero_total_flux",
+]
 
 
 def extend_with_ghost_cells(
@@ -43,3 +49,38 @@ def extend_with_ghost_cells(
     raise InvalidConfigurationError(
         f"Unsupported boundary condition {boundary!r}; expected 'periodic' or 'transmissive'."
     )
+
+
+def extend_with_ghost_cells_2d(
+    values: ArrayLike,
+    ghost_width: int,
+    boundary: BoundaryCondition2D,
+) -> NDArray[np.float64]:
+    """Return a 2D field with ghost cells on both coordinate axes.
+
+    ``transmissive`` and ``zero_diffusive_flux`` both use zero-gradient
+    ghost values, but retain distinct boundary names because transmissive
+    advection is not a zero-total-flux condition. ``zero_total_flux`` is
+    enforced on the combined finite-volume flux after reconstruction.
+    """
+
+    array = np.asarray(values, dtype=np.float64)
+    if array.ndim != 2 or array.size == 0:
+        raise InvalidConfigurationError("Ghost-cell input must be a non-empty 2D array.")
+    if not np.all(np.isfinite(array)):
+        raise InvalidConfigurationError("Ghost-cell input contains NaN or infinity.")
+    if isinstance(ghost_width, bool) or ghost_width < 0:
+        raise InvalidConfigurationError("ghost_width must be a non-negative integer.")
+    if ghost_width == 0:
+        return array.copy()
+    if boundary == "periodic":
+        return np.pad(array, ghost_width, mode="wrap")
+    if boundary in ("transmissive", "zero_diffusive_flux", "zero_total_flux"):
+        return np.pad(array, ghost_width, mode="edge")
+    raise InvalidConfigurationError(f"Unsupported 2D boundary condition {boundary!r}.")
+
+
+def reconstruction_boundary(boundary: BoundaryCondition2D) -> BoundaryCondition:
+    """Map physical-flux boundary names to their ghost-state treatment."""
+
+    return "periodic" if boundary == "periodic" else "transmissive"

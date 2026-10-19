@@ -1,0 +1,29 @@
+# Reisch, Navas-Montilla & Özgen-Xian (2024), Table 1 defaults.
+# Values in the paper expressed in kJ or kW have been converted to J or W.
+[physics]
+bulk_density = 40.0                  # kg m^-3
+specific_heat = 1000.0              # J kg^-1 K^-1
+pre_exponential_factor = 0.05        # s^-1
+heating_value = 4_000_000.0          # J kg^-1
+cooling_coefficient = 4000.0         # W m^-3 K^-1
+ambient_temperature = 300.0          # K
+pyrolysis_temperature = 400.0        # K
+activation_temperature = 400.0       # K
+thermal_conductivity = 2000.0        # W m^-1 K^-1
+velocity = 0.0                       # m s^-1
+
+[numerics]
+cfl = 0.1
+weno_order = 7
+boundary = "transmissive"
+
+[mesh]
+x_left = 0.0                         # m
+x_right = 500.0                      # m
+n_cells = 400
+
+[simulation]
+initial_condition = "reisch_wave"
+final_time = 200.0                   # s
+output_interval = 25.0               # s
+maximum_time_step = 0.05             # s

@@ -6,9 +6,12 @@ from pathlib import Path
 from wildfire_model.exceptions import InvalidConfigurationError
 from wildfire_model.inputs.config import SimulationConfiguration, load_configuration
 from wildfire_model.inputs.reference_cases import reisch_wave_initial_state
+from wildfire_model.inputs.reference_cases_2d import DeterministicCase2D
 from wildfire_model.mesh.mesh_1d import UniformMesh1D
 from wildfire_model.models.parameters import ADRParameters
+from wildfire_model.numerics.complete_solver_2d import NavasMontillaSolver2D
 from wildfire_model.numerics.solver_1d import ADRSolver1D, SimulationResult
+from wildfire_model.numerics.solver_2d import SimulationResult2D
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,3 +55,18 @@ def run_from_config(path: str | Path) -> SimulationRun:
     """Load a TOML configuration and run its simulation."""
 
     return run_simulation(load_configuration(path))
+
+
+def run_complete_case(
+    case: DeterministicCase2D,
+    *,
+    maximum_time_step: float | None = None,
+) -> SimulationResult2D:
+    """Run a reproducible two-dimensional Navas-Montilla case."""
+
+    solver = NavasMontillaSolver2D(case.mesh, case.configuration)
+    return solver.solve(
+        case.initial_state,
+        case.output_times,
+        maximum_time_step=maximum_time_step,
+    )
