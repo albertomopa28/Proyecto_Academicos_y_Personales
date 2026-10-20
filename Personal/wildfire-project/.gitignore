@@ -10,8 +10,9 @@ build/
 dist/
 htmlcov/
 
-# Generated verification output
+# Generated results and local tests
 artifacts/
+downloads/
 codex_tests/
 
 # Notebook checkpoints and local editor files

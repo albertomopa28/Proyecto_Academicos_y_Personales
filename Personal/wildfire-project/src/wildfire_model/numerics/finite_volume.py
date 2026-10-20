@@ -190,8 +190,8 @@ def energy_transport_rhs_2d(
     """Discretize the transport terms of Navas-Montilla Eq. (32).
 
     Conductive and radiative fluxes use Eq. (76), then their divergence is
-    divided by cell-centered volumetric heat capacity. Advection uses the
-    conservative flux form selected for the two-dimensional core.
+    divided by cell-centered volumetric heat capacity. The product rule
+    ``-v·grad(T) = -div(v*T) + T*div(v)`` recovers Eq. (32) on curved terrain.
     """
 
     capacity = _validate_2d_field(
@@ -215,13 +215,24 @@ def energy_transport_rhs_2d(
         thermal_conductivity,
         boundary,
     )
+    values = _validate_2d_field(temperature, mesh, "Temperature")
+    face_velocity_x = _face_averages_2d(
+        _validate_2d_field(velocity_x, mesh, "x velocity"), boundary
+    )[0]
+    face_velocity_y = _face_averages_2d(
+        _validate_2d_field(velocity_y, mesh, "y velocity"), boundary
+    )[1]
+    divergence_correction = values * (
+        (face_velocity_x[:, 1:] - face_velocity_x[:, :-1]) / mesh.dx
+        + (face_velocity_y[1:, :] - face_velocity_y[:-1, :]) / mesh.dy
+    )
     if boundary == "zero_total_flux":
         capacity_x, capacity_y = _face_averages_2d(capacity, boundary)
         total_x = advective_x - conductive_x / capacity_x
         total_y = advective_y - conductive_y / capacity_y
         total_x[:, (0, -1)] = 0.0
         total_y[(0, -1), :] = 0.0
-        return -(
+        return divergence_correction - (
             (total_x[:, 1:] - total_x[:, :-1]) / mesh.dx
             + (total_y[1:, :] - total_y[:-1, :]) / mesh.dy
         )
@@ -233,4 +244,4 @@ def energy_transport_rhs_2d(
         (conductive_x[:, 1:] - conductive_x[:, :-1]) / mesh.dx
         + (conductive_y[1:, :] - conductive_y[:-1, :]) / mesh.dy
     ) / capacity
-    return advection + conduction
+    return advection + conduction + divergence_correction

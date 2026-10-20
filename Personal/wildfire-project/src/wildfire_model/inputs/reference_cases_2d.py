@@ -1,10 +1,12 @@
 """Reproducible Navas-Montilla two-dimensional deterministic cases."""
 
 from dataclasses import dataclass, replace
+from math import isfinite
 
 import numpy as np
 from numpy.typing import NDArray
 
+from wildfire_model.exceptions import InvalidConfigurationError
 from wildfire_model.inputs.config import CompleteModelConfiguration
 from wildfire_model.inputs.initial_conditions import (
     apply_firebreak,
@@ -22,6 +24,38 @@ class DeterministicCase2D:
     initial_state: ADRState
     configuration: CompleteModelConfiguration
     output_times: NDArray[np.float64]
+
+
+def sloping_hill(x: NDArray[np.float64], y: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Synthetic terrain in m: a 4% slope and a 6 m Gaussian hill."""
+
+    return 0.04 * x + 6.0 * np.exp(-0.5 * (((x - 26.0) / 9.0) ** 2 + ((y - 16.0) / 10.0) ** 2))
+
+
+def terrain_fire_case(
+    *,
+    nx: int = 80,
+    ny: int = 64,
+    duration: float = 180.0,
+    frames: int = 121,
+) -> DeterministicCase2D:
+    """Build a terrain walkthrough with paper defaults and a synthetic hill."""
+
+    if not isfinite(duration) or duration <= 0.0:
+        raise InvalidConfigurationError("duration must be finite and positive in s.")
+    if isinstance(frames, bool) or not isinstance(frames, int) or frames < 2:
+        raise InvalidConfigurationError("frames must be an integer >= 2.")
+    mesh = UniformMesh2D(0.0, 40.0, 0.0, 32.0, nx=nx, ny=ny)
+    initial = circular_ignition(
+        mesh, (9.0, 16.0), 2.0, ignition_temperature=670.0, ambient_temperature=300.0
+    )
+    configuration = CompleteModelConfiguration(
+        elevation=sloping_hill,
+        wind_x=1.0,
+        moisture_model="S2M",
+        moisture=0.1,
+    )
+    return DeterministicCase2D(mesh, initial, configuration, np.linspace(0.0, duration, frames))
 
 
 def _paper_mesh(full_resolution: bool) -> UniformMesh2D:

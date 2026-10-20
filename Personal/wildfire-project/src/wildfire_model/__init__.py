@@ -1,5 +1,6 @@
 """Deterministic advection-diffusion-reaction wildfire model."""
 
+from wildfire_model.helpers.paraview import write_paraview_series
 from wildfire_model.inputs.config import CompleteModelConfiguration
 from wildfire_model.mesh.mesh_1d import UniformMesh1D
 from wildfire_model.mesh.mesh_2d import UniformMesh2D
@@ -20,4 +21,5 @@ __all__ = [
     "SimulationResult2D",
     "UniformMesh1D",
     "UniformMesh2D",
+    "write_paraview_series",
 ]

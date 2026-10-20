@@ -289,10 +289,17 @@ def elevation_gradient(
     values = np.asarray(elevation, dtype=np.float64)
     if values.shape != mesh.shape or not np.all(np.isfinite(values)):
         raise InvalidConfigurationError(f"Elevation must be finite with shape {mesh.shape}.")
-    if min(mesh.shape) >= 3:
-        gradient_y, gradient_x = np.gradient(values, mesh.dy, mesh.dx, edge_order=2)
-    else:
-        gradient_y, gradient_x = np.gradient(values, mesh.dy, mesh.dx, edge_order=1)
+    gradients = []
+    for axis, spacing in ((0, mesh.dy), (1, mesh.dx)):
+        if values.shape[axis] == 1:
+            gradients.append(np.zeros_like(values))
+        else:
+            gradients.append(
+                np.gradient(
+                    values, spacing, axis=axis, edge_order=2 if values.shape[axis] >= 3 else 1
+                )
+            )
+    gradient_y, gradient_x = gradients
     return (
         np.asarray(gradient_x, dtype=np.float64),
         np.asarray(gradient_y, dtype=np.float64),

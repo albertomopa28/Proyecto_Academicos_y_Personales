@@ -16,13 +16,15 @@ def main() -> None:
         default=Path("src/wildfire_model/inputs/reisch_stage1.toml"),
         help="TOML simulation configuration.",
     )
+    parser.add_argument("--output", type=Path, default=Path("downloads/reisch_1d"))
     arguments = parser.parse_args()
-    simulation = run_from_config(arguments.config)
+    simulation = run_from_config(arguments.config, output_directory=arguments.output)
     result = simulation.result
     print(f"cells={simulation.mesh.n_cells}")
     print(f"final_time_s={result.times[-1]:.12g}")
     print(f"maximum_temperature_K={result.temperature[-1].max():.12g}")
     print(f"minimum_biomass={result.biomass[-1].min():.12g}")
+    print(f"paraview_file={(arguments.output / 'series.xdmf').resolve()}")
 
 
 if __name__ == "__main__":
